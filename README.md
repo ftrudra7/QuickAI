@@ -289,7 +289,7 @@ git push origin feature-name
 
 Built and Maintained By:
 
-- **Rudra Kumar Jha**  (https://github.com/ftrudra7)
+- **Rudra Jha**  (https://github.com/ftrudra7)
 - **Ashlesha Chauhan** (https://github.com/AshleshaChauhan-11)
 
 ---
