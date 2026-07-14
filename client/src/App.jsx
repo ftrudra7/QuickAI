@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+// import { useEffect } from "react";
 import { Route, Routes } from "react-router-dom";
-import { useAuth } from "@clerk/react";
+// import { useAuth } from "@clerk/react";
 
 import Home from "./pages/Home";
 import Layout from "./pages/Layout";
@@ -13,86 +13,57 @@ import RemoveObject from "./pages/RemoveObject";
 import ReviewResume from "./pages/ReviewResume";
 import Community from "./pages/Community";
 
+import {Toaster} from 'react-hot-toast'
+
 const App = () => {
-
-  const { getToken } = useAuth();
-
-  useEffect(() => {
-
-    const fetchToken = async () => {
-
-      try {
-
-        const token = await getToken();
-
-        console.log("================================");
-        console.log("CLERK SESSION TOKEN");
-        console.log(token);
-        console.log("================================");
-
-      } catch (error) {
-
-        console.error(error);
-
-      }
-
-    };
-
-    fetchToken();
-
-  }, [getToken]);
-
   return (
+    <>
+      <Toaster />
 
-    <Routes>
+      <Routes>
+        <Route path="/" element={<Home />} />
 
-      <Route path="/" element={<Home />} />
+        <Route path="/ai" element={<Layout />}>
+          <Route index element={<Dashboard />} />
 
-      <Route path="/ai" element={<Layout />}>
+          <Route
+            path="write-article"
+            element={<WriteArticle />}
+          />
 
-        <Route index element={<Dashboard />} />
+          <Route
+            path="blog-titles"
+            element={<BlogTitles />}
+          />
 
-        <Route
-          path="write-article"
-          element={<WriteArticle />}
-        />
+          <Route
+            path="generate-images"
+            element={<GenerateImages />}
+          />
 
-        <Route
-          path="blog-titles"
-          element={<BlogTitles />}
-        />
+          <Route
+            path="remove-background"
+            element={<RemoveBackground />}
+          />
 
-        <Route
-          path="generate-images"
-          element={<GenerateImages />}
-        />
+          <Route
+            path="remove-object"
+            element={<RemoveObject />}
+          />
 
-        <Route
-          path="remove-background"
-          element={<RemoveBackground />}
-        />
+          <Route
+            path="review-resume"
+            element={<ReviewResume />}
+          />
 
-        <Route
-          path="remove-object"
-          element={<RemoveObject />}
-        />
-
-        <Route
-          path="review-resume"
-          element={<ReviewResume />}
-        />
-
-        <Route
-          path="community"
-          element={<Community />}
-        />
-
-      </Route>
-
-    </Routes>
-
+          <Route
+            path="community"
+            element={<Community />}
+          />
+        </Route>
+      </Routes>
+    </>
   );
-
 };
 
 export default App;

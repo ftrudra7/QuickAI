@@ -4,6 +4,7 @@ import "dotenv/config";
 import { clerkMiddleware } from "@clerk/express";
 import aiRouter from "./routes/aiRoutes.js";
 import connectCloudinary from "./configs/cloudinary.js";
+import userRouter from "./routes/userRoutes.js";
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.get("/", (req, res) => {
 
 // AI Routes
 app.use("/api/ai", aiRouter);
+app.use('/api/user', userRouter)
 
 // 404 Handler
 app.use((req, res) => {

@@ -3,6 +3,9 @@ import { useState } from "react";
 import axios from "axios";
 import { useAuth } from "@clerk/react";
 import ReactMarkdown from "react-markdown";
+import toast from "react-hot-toast";
+
+axios.defaults.baseURL = import.meta.env.VITE_BASE_URL;
 
 const WriteArticle = () => {
   const { getToken } = useAuth();
@@ -18,16 +21,20 @@ const WriteArticle = () => {
   const [loading, setLoading] = useState(false);
   const [article, setArticle] = useState("");
 
+  // const {getToken} = useAuth()
+
   const onSubmitHandler = async (e) => {
     e.preventDefault();
 
     try {
       setLoading(true);
 
+      // const prompt = 'Write an article about ${input} in ${selectedLength.text}'
+
       const token = await getToken();
 
       const { data } = await axios.post(
-        "http://localhost:3000/api/ai/generate-article",
+        "/api/ai/generate-article",
         {
           prompt: input,
           length: selectedLength.length,
@@ -42,10 +49,12 @@ const WriteArticle = () => {
       if (data.success) {
         setArticle(data.content);
       } else {
+        toast.error(data.message)
         alert(data.message);
       }
     } catch (error) {
       console.error(error);
+      // toast.error(data.message)
       alert(error.response?.data?.message || "Something went wrong");
     } finally {
       setLoading(false);
