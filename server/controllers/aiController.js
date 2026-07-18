@@ -3,31 +3,34 @@ import axios from "axios";
 import sql from "../configs/db.js";
 import { clerkClient } from "@clerk/express";
 import FormData from "form-data";
-import connectCloudinary, { cloudinary } from "../configs/cloudinary.js";
+import { cloudinary } from "../configs/cloudinary.js";
 import fs from "fs";
-import * as pdfParse from "pdf-parse";
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
-const checkFreeUsage = (plan, free_usage) => {
-  return plan !== "premium" && free_usage >= 10;
+// =========================================
+// Helper Functions
+// =========================================
+
+const checkFreeUsage = (plan, freeUsage) => {
+  return plan !== "premium" && freeUsage >= 10;
 };
 
-const incrementFreeUsage = async (userId, plan, free_usage) => {
-  if (plan !== "premium") {
-    await clerkClient.users.updateUserMetadata(userId, {
-      privateMetadata: {
-        free_usage: free_usage + 1,
-      },
-    });
-  }
+const incrementFreeUsage = async (userId, plan, freeUsage) => {
+  if (plan === "premium") return;
+
+  await clerkClient.users.updateUserMetadata(userId, {
+    privateMetadata: {
+      free_usage: freeUsage + 1,
+    },
+  });
 };
 
-// =======================
+// =========================================
 // Generate Article
-// =======================
+// =========================================
 
 export const generateArticle = async (req, res) => {
   try {
@@ -35,16 +38,16 @@ export const generateArticle = async (req, res) => {
     const { prompt, length } = req.body;
 
     const plan = req.plan;
-    const free_usage = req.free_usage;
+    const freeUsage = req.free_usage;
 
     if (!prompt || !length) {
       return res.status(400).json({
         success: false,
-        message: "Prompt and length are required.",
+        message: "Prompt and article length are required.",
       });
     }
 
-    if (checkFreeUsage(plan, free_usage)) {
+    if (checkFreeUsage(plan, freeUsage)) {
       return res.status(403).json({
         success: false,
         message: "Free usage limit reached. Upgrade to Premium.",
@@ -53,28 +56,28 @@ export const generateArticle = async (req, res) => {
 
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
+      temperature: 0.7,
       messages: [
         {
           role: "system",
           content:
-            "You are an expert professional content writer. Return the article in clean Markdown format.",
+            "You are a professional content writer. Write detailed, engaging, SEO-friendly articles in Markdown format.",
         },
         {
           role: "user",
-          content: `Write a professional article of approximately ${length} words on the topic:
+          content: `Write a professional article of approximately ${length} words on:
 
 ${prompt}`,
         },
       ],
-      temperature: 0.7,
     });
 
-    const content = completion.choices[0].message.content;
+    const content = completion.choices?.[0]?.message?.content;
 
-    if (!content?.trim()) {
+    if (!content) {
       return res.status(500).json({
         success: false,
-        message: "AI returned an empty response.",
+        message: "AI failed to generate the article.",
       });
     }
 
@@ -85,26 +88,26 @@ ${prompt}`,
       (${userId}, ${prompt}, ${content}, 'article')
     `;
 
-    await incrementFreeUsage(userId, plan, free_usage);
+    await incrementFreeUsage(userId, plan, freeUsage);
 
     return res.status(200).json({
       success: true,
       content,
     });
-  } catch (err) {
-    console.error("Generate Article Error:");
-    console.error(err);
+
+  } catch (error) {
+    console.error("Generate Article Error:", error);
 
     return res.status(500).json({
       success: false,
-      message: err.message || "Internal Server Error",
+      message: error.message || "Internal Server Error",
     });
   }
 };
 
-// =======================
+// =========================================
 // Generate Blog Titles
-// =======================
+// =========================================
 
 export const generateBlogTitle = async (req, res) => {
   try {
@@ -112,7 +115,7 @@ export const generateBlogTitle = async (req, res) => {
     const { prompt } = req.body;
 
     const plan = req.plan;
-    const free_usage = req.free_usage;
+    const freeUsage = req.free_usage;
 
     if (!prompt) {
       return res.status(400).json({
@@ -121,7 +124,7 @@ export const generateBlogTitle = async (req, res) => {
       });
     }
 
-    if (checkFreeUsage(plan, free_usage)) {
+    if (checkFreeUsage(plan, freeUsage)) {
       return res.status(403).json({
         success: false,
         message: "Free usage limit reached. Upgrade to Premium.",
@@ -130,34 +133,34 @@ export const generateBlogTitle = async (req, res) => {
 
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
+      temperature: 0.7,
       messages: [
         {
           role: "system",
           content:
-            "You are an SEO expert and content strategist.",
+            "You are an SEO specialist who generates highly clickable blog titles.",
         },
         {
           role: "user",
-          content: `Generate 10 catchy, SEO-friendly blog titles about:
+          content: `Generate 10 catchy SEO-friendly blog titles for:
 
 "${prompt}"
 
 Rules:
-- Return only the titles.
-- Number each title.
-- No explanations.
-- Maximum 70 characters each.`,
+- Return only titles.
+- Number them.
+- Maximum 70 characters each.
+- No explanations.`,
         },
       ],
-      temperature: 0.7,
     });
 
-    const content = completion.choices[0].message.content;
+    const content = completion.choices?.[0]?.message?.content;
 
-    if (!content?.trim()) {
+    if (!content) {
       return res.status(500).json({
         success: false,
-        message: "AI returned an empty response.",
+        message: "AI failed to generate blog titles.",
       });
     }
 
@@ -168,37 +171,44 @@ Rules:
       (${userId}, ${prompt}, ${content}, 'blog-title')
     `;
 
-    await incrementFreeUsage(userId, plan, free_usage);
+    await incrementFreeUsage(userId, plan, freeUsage);
 
     return res.status(200).json({
       success: true,
       content,
     });
-  } catch (err) {
-    console.error("Generate Blog Title Error:");
-    console.error(err);
+
+  } catch (error) {
+    console.error("Generate Blog Title Error:", error);
 
     return res.status(500).json({
       success: false,
-      message: err.message || "Internal Server Error",
+      message: error.message || "Internal Server Error",
     });
   }
 };
-
-// =======================
-// Generate Image (ClipDrop)
-// =======================
+// =========================================
+// Generate Image
+// =========================================
 
 export const generateImage = async (req, res) => {
   try {
-    const { userId } = req.auth();
+    const userId = req.userId;
     const { prompt, publish } = req.body;
+
     const plan = req.plan;
 
     if (plan !== "premium") {
-      return res.json({
+      return res.status(403).json({
         success: false,
-        message: "This feature is only available for premium subscriptions",
+        message: "This feature is only available for Premium users.",
+      });
+    }
+
+    if (!prompt) {
+      return res.status(400).json({
+        success: false,
+        message: "Prompt is required.",
       });
     }
 
@@ -221,47 +231,62 @@ export const generateImage = async (req, res) => {
       "binary"
     ).toString("base64")}`;
 
-    const { secure_url } = await cloudinary.uploader.upload(base64Image);
+    const uploadResult = await cloudinary.uploader.upload(base64Image);
 
     await sql`
       INSERT INTO creations
       (user_id, prompt, content, type, publish)
       VALUES
-      (${userId}, ${prompt}, ${secure_url}, 'image', ${publish ?? false})
+      (
+        ${userId},
+        ${prompt},
+        ${uploadResult.secure_url},
+        'image',
+        ${publish ?? false}
+      )
     `;
 
-    res.json({
+    return res.status(200).json({
       success: true,
-      content: secure_url,
+      content: uploadResult.secure_url,
     });
-  } catch (error) {
-    console.log(error);
 
-    res.json({
+  } catch (error) {
+    console.error("Generate Image Error:", error);
+
+    return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Internal Server Error",
     });
   }
 };
 
-// =======================
+// =========================================
 // Remove Image Background
-// =======================
+// =========================================
 
 export const removeImageBackground = async (req, res) => {
   try {
-    const { userId } = req.auth();
+    const userId = req.userId;
     const image = req.file;
+
     const plan = req.plan;
 
     if (plan !== "premium") {
-      return res.json({
+      return res.status(403).json({
         success: false,
-        message: "This feature is only available for premium subscriptions",
+        message: "This feature is only available for Premium users.",
       });
     }
 
-    const { secure_url } = await cloudinary.uploader.upload(image.path, {
+    if (!image) {
+      return res.status(400).json({
+        success: false,
+        message: "Please upload an image.",
+      });
+    }
+
+    const uploadResult = await cloudinary.uploader.upload(image.path, {
       transformation: [
         {
           effect: "background_removal",
@@ -273,44 +298,59 @@ export const removeImageBackground = async (req, res) => {
       INSERT INTO creations
       (user_id, prompt, content, type)
       VALUES
-      (${userId}, 'Remove background from image', ${secure_url}, 'image')
+      (
+        ${userId},
+        'Background Removed',
+        ${uploadResult.secure_url},
+        'image'
+      )
     `;
 
-    res.json({
+    return res.status(200).json({
       success: true,
-      content: secure_url,
+      content: uploadResult.secure_url,
     });
-  } catch (error) {
-    console.log(error);
 
-    res.json({
+  } catch (error) {
+    console.error("Remove Background Error:", error);
+
+    return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Internal Server Error",
     });
   }
 };
 
-// =======================
+// =========================================
 // Remove Image Object
-// =======================
+// =========================================
 
 export const removeImageObject = async (req, res) => {
   try {
-    const { userId } = req.auth();
-    const { object } = req.body;
+    const userId = req.userId;
+
     const image = req.file;
+    const { object } = req.body;
+
     const plan = req.plan;
 
     if (plan !== "premium") {
-      return res.json({
+      return res.status(403).json({
         success: false,
-        message: "This feature is only available for premium subscriptions",
+        message: "This feature is only available for Premium users.",
       });
     }
 
-    const { public_id } = await cloudinary.uploader.upload(image.path);
+    if (!image || !object) {
+      return res.status(400).json({
+        success: false,
+        message: "Image and object name are required.",
+      });
+    }
 
-    const imageUrl = cloudinary.url(public_id, {
+    const uploadResult = await cloudinary.uploader.upload(image.path);
+
+    const imageUrl = cloudinary.url(uploadResult.public_id, {
       transformation: [
         {
           effect: `gen_remove:${object}`,
@@ -323,92 +363,144 @@ export const removeImageObject = async (req, res) => {
       INSERT INTO creations
       (user_id, prompt, content, type)
       VALUES
-      (${userId}, ${`Removed ${object} from image`}, ${imageUrl}, 'image')
+      (
+        ${userId},
+        ${`Removed "${object}" from image`},
+        ${imageUrl},
+        'image'
+      )
     `;
 
-    res.json({
+    return res.status(200).json({
       success: true,
       content: imageUrl,
     });
-  } catch (error) {
-    console.log(error);
 
-    res.json({
+  } catch (error) {
+    console.error("Remove Object Error:", error);
+
+    return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Internal Server Error",
     });
   }
 };
-
-// =======================
+// =========================================
 // Resume Review
-// =======================
+// =========================================
 
 export const resumeReview = async (req, res) => {
   try {
-    const { userId } = req.auth();
+    const userId = req.userId;
     const resume = req.file;
+
     const plan = req.plan;
 
     if (plan !== "premium") {
-      return res.json({
+      return res.status(403).json({
         success: false,
-        message: "This feature is only available for premium subscriptions",
+        message: "This feature is only available for Premium users.",
+      });
+    }
+
+    if (!resume) {
+      return res.status(400).json({
+        success: false,
+        message: "Please upload a resume.",
       });
     }
 
     if (resume.size > 5 * 1024 * 1024) {
-      return res.json({
+      return res.status(400).json({
         success: false,
-        message: "Resume file size exceeds allowed size (5MB).",
+        message: "Resume file size exceeds 5MB.",
       });
     }
 
     const dataBuffer = fs.readFileSync(resume.path);
 
-    const pdfData = await pdfParse.default(dataBuffer);
+    // Dynamic import (prevents Vercel startup crash)
+    let pdfText = "";
 
-    const prompt = `Review the following resume and provide constructive feedback on its strengths, weaknesses, and areas for improvement.
+    try {
+      const pdfParse = (await import("pdf-parse")).default;
+      const pdfData = await pdfParse(dataBuffer);
+      pdfText = pdfData.text;
+    } catch (pdfError) {
+      console.error("PDF Parse Error:", pdfError);
 
-Resume Content:
+      return res.status(500).json({
+        success: false,
+        message: "Unable to parse the uploaded PDF.",
+      });
+    }
 
-${pdfData.text}`;
+    const prompt = `
+You are an experienced HR recruiter and ATS expert.
+
+Review the following resume.
+
+Give feedback under these headings:
+
+# Overall Score
+# Strengths
+# Weaknesses
+# ATS Compatibility
+# Suggestions for Improvement
+
+Resume:
+
+${pdfText}
+`;
 
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
+      temperature: 0.5,
       messages: [
         {
           role: "system",
           content:
-            "You are an experienced HR recruiter and ATS expert. Review resumes professionally.",
+            "You are a professional HR recruiter and resume reviewer.",
         },
         {
           role: "user",
           content: prompt,
         },
       ],
-      temperature: 0.5,
     });
 
-    const content = completion.choices[0].message.content;
+    const content = completion.choices?.[0]?.message?.content;
+
+    if (!content) {
+      return res.status(500).json({
+        success: false,
+        message: "AI failed to review the resume.",
+      });
+    }
 
     await sql`
       INSERT INTO creations
       (user_id, prompt, content, type)
       VALUES
-      (${userId}, 'Review uploaded resume', ${content}, 'resume-review')
+      (
+        ${userId},
+        'Resume Review',
+        ${content},
+        'resume-review'
+      )
     `;
 
-    res.json({
+    return res.status(200).json({
       success: true,
       content,
     });
-  } catch (error) {
-    console.log(error);
 
-    res.json({
+  } catch (error) {
+    console.error("Resume Review Error:", error);
+
+    return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || "Internal Server Error",
     });
   }
 };
