@@ -1,18 +1,64 @@
-import { Eraser, Sparkles } from "lucide-react"
-import { useState } from "react"
+import { Eraser, Sparkles } from "lucide-react";
+import { useState } from "react";
+import axios from "axios";
+import { useAuth } from "@clerk/react";
+import toast from "react-hot-toast";
+
+axios.defaults.baseURL = import.meta.env.VITE_BASE_URL;
 
 const RemoveBackground = () => {
+  const { getToken } = useAuth();
 
-  const [setInput] = useState(null)
+  const [input, setInput] = useState(null);
+  const [content, setContent] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const onSubmitHandler = async (e) => {
-    e.preventDefault()
-  }
+    e.preventDefault();
+
+    if (!input) {
+      return toast.error("Please select an image.");
+    }
+
+    try {
+      setLoading(true);
+
+      const formData = new FormData();
+      formData.append("image", input);
+
+      const token = await getToken();
+
+      const { data } = await axios.post(
+        "/api/ai/remove-background",
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      if (data.success) {
+        setContent(data.content);
+      } else {
+        toast.error(data.message);
+      }
+    } catch (error) {
+      console.error(error);
+
+      toast.error(
+        error.response?.data?.message ||
+          error.message ||
+          "Something went wrong"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-
     <div className="p-8">
-
       <div className="grid lg:grid-cols-2 gap-8">
 
         {/* Left Column */}
@@ -21,19 +67,15 @@ const RemoveBackground = () => {
           onSubmit={onSubmitHandler}
           className="bg-[#111827] border border-slate-700 rounded-2xl p-8"
         >
-
           <div className="flex items-center gap-3 mb-8">
-
             <Sparkles className="w-6 h-6 text-[#FF4938]" />
 
             <h1 className="text-3xl font-bold text-white">
               Background Removal
             </h1>
-
           </div>
 
           <div>
-
             <p className="text-sm text-slate-300 mb-2">
               Upload Image
             </p>
@@ -49,20 +91,21 @@ const RemoveBackground = () => {
             <p className="text-xs text-slate-500 mt-3">
               Supports JPG, PNG and other image formats.
             </p>
-
           </div>
 
           <button
             type="submit"
-            className="w-full mt-8 rounded-xl bg-gradient-to-r from-[#F6AB41] to-[#FF4938] py-3 flex items-center justify-center gap-2 text-white font-medium hover:opacity-90 transition"
+            disabled={loading}
+            className="w-full mt-8 rounded-xl bg-gradient-to-r from-[#F6AB41] to-[#FF4938] py-3 flex items-center justify-center gap-2 text-white font-medium hover:opacity-90 transition disabled:opacity-60"
           >
+            {loading ? (
+              <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+            ) : (
+              <Eraser className="w-5 h-5" />
+            )}
 
-            <Eraser className="w-5 h-5" />
-
-            Remove Background
-
+            {loading ? "Removing..." : "Remove Background"}
           </button>
-
         </form>
 
         {/* Right Column */}
@@ -79,21 +122,40 @@ const RemoveBackground = () => {
 
           </div>
 
-          <div className="flex-1 flex items-center justify-center">
+          {!content ? (
 
-            <div className="text-center text-slate-400">
+            <div className="flex-1 flex items-center justify-center">
 
-              <Eraser className="mx-auto w-16 h-16 mb-5" />
+              <div className="text-center text-slate-400">
 
-              <p>
-                Upload an image and click
-                <br />
-                "Remove Background" to get started
-              </p>
+                <Eraser className="mx-auto w-16 h-16 mb-5" />
+
+                <p>
+                  Upload an image and click
+                  <br />
+                  <span className="text-[#FF4938] font-semibold">
+                    Remove Background
+                  </span>{" "}
+                  to get started.
+                </p>
+
+              </div>
 
             </div>
 
-          </div>
+          ) : (
+
+            <div className="mt-6 flex-1 flex items-center justify-center">
+
+              <img
+                src={content}
+                alt="Processed"
+                className="max-h-[550px] w-auto rounded-xl border border-slate-700"
+              />
+
+            </div>
+
+          )}
 
         </div>
 
@@ -101,8 +163,8 @@ const RemoveBackground = () => {
 
     </div>
 
-  )
+  );
 
-}
+};
 
-export default RemoveBackground
+export default RemoveBackground;

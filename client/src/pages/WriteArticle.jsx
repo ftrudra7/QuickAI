@@ -133,14 +133,15 @@ const WriteArticle = () => {
         </div>
 
         {article ? (
-          <ReactMarkdown
-            className="prose prose-invert max-w-none text-slate-300"
-          >
-            {article}
-          </ReactMarkdown>
+          <div className="prose prose-invert max-w-none text-slate-300 reset.tw">
+  <ReactMarkdown>
+    {article}
+  </ReactMarkdown>
+</div>
         ) : (
           <div className="flex justify-center items-center h-[420px] text-slate-400">
-            Enter a topic and generate an article.
+            Enter a topic to <br/>
+            <span className="text-[#226BFF]">generate an article</span>.
           </div>
         )}
       </div>

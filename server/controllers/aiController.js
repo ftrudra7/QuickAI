@@ -1,14 +1,14 @@
-import { GoogleGenAI } from "@google/genai";
+import Groq from "groq-sdk";
 import axios from "axios";
 import sql from "../configs/db.js";
 import { clerkClient } from "@clerk/express";
 import FormData from "form-data";
 import connectCloudinary, { cloudinary } from "../configs/cloudinary.js";
-import fs from 'fs'
+import fs from "fs";
 import * as pdfParse from "pdf-parse";
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
 });
 
 const checkFreeUsage = (plan, free_usage) => {
@@ -51,19 +51,30 @@ export const generateArticle = async (req, res) => {
       });
     }
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: `Write a professional article of approximately ${length} words on the topic:
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are an expert professional content writer. Return the article in clean Markdown format.",
+        },
+        {
+          role: "user",
+          content: `Write a professional article of approximately ${length} words on the topic:
 
 ${prompt}`,
+        },
+      ],
+      temperature: 0.7,
     });
 
-    const content = response.text;
+    const content = completion.choices[0].message.content;
 
     if (!content?.trim()) {
       return res.status(500).json({
         success: false,
-        message: "Gemini returned an empty response.",
+        message: "AI returned an empty response.",
       });
     }
 
@@ -88,7 +99,7 @@ ${prompt}`,
       success: false,
       message: err.message || "Internal Server Error",
     });
-}
+  }
 };
 
 // =======================
@@ -117,9 +128,17 @@ export const generateBlogTitle = async (req, res) => {
       });
     }
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: `Generate 10 catchy, SEO-friendly blog titles about:
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are an SEO expert and content strategist.",
+        },
+        {
+          role: "user",
+          content: `Generate 10 catchy, SEO-friendly blog titles about:
 
 "${prompt}"
 
@@ -128,14 +147,17 @@ Rules:
 - Number each title.
 - No explanations.
 - Maximum 70 characters each.`,
+        },
+      ],
+      temperature: 0.7,
     });
 
-    const content = response.text;
+    const content = completion.choices[0].message.content;
 
     if (!content?.trim()) {
       return res.status(500).json({
         success: false,
-        // message: "Gemini returned an empty response.",
+        message: "AI returned an empty response.",
       });
     }
 
@@ -152,7 +174,8 @@ Rules:
       success: true,
       content,
     });
-    } catch (err) {
+  } catch (err) {
+    console.error("Generate Blog Title Error:");
     console.error(err);
 
     return res.status(500).json({
@@ -162,7 +185,9 @@ Rules:
   }
 };
 
+// =======================
 // Generate Image (ClipDrop)
+// =======================
 
 export const generateImage = async (req, res) => {
   try {
@@ -196,9 +221,7 @@ export const generateImage = async (req, res) => {
       "binary"
     ).toString("base64")}`;
 
-    const { secure_url } = await connectCloudinary.uploader.upload(
-      base64Image
-    );
+    const { secure_url } = await cloudinary.uploader.upload(base64Image);
 
     await sql`
       INSERT INTO creations
@@ -212,7 +235,7 @@ export const generateImage = async (req, res) => {
       content: secure_url,
     });
   } catch (error) {
-    console.log(error.message);
+    console.log(error);
 
     res.json({
       success: false,
@@ -221,93 +244,129 @@ export const generateImage = async (req, res) => {
   }
 };
 
-//REMOVE IMAGE BACKGROUND
+// =======================
+// Remove Image Background
+// =======================
 
-export const removeImageBackground = async (req, res)=>{
+export const removeImageBackground = async (req, res) => {
   try {
     const { userId } = req.auth();
-    const { image } = req.file;
+    const image = req.file;
     const plan = req.plan;
 
-    if(plan !== 'premium'){
-      return res.json({ success: false, message: "This feature is only available for premium subscriptions"})
+    if (plan !== "premium") {
+      return res.json({
+        success: false,
+        message: "This feature is only available for premium subscriptions",
+      });
     }
 
-    const {secure_url} = await cloudinary.uploader.upload(image.path, {
+    const { secure_url } = await cloudinary.uploader.upload(image.path, {
       transformation: [
         {
-          effect: 'background_removal',
-          background_removal: 'remove_the_background'
-        }
-      ]
-    })
+          effect: "background_removal",
+        },
+      ],
+    });
 
     await sql`
       INSERT INTO creations
-      (user_id, prompt, content, type, publish)
+      (user_id, prompt, content, type)
       VALUES
       (${userId}, 'Remove background from image', ${secure_url}, 'image')
     `;
 
-    res.json({ success: true, content: secure_url})
+    res.json({
+      success: true,
+      content: secure_url,
+    });
   } catch (error) {
-    console.log(error.message)
-    res.json({success: false, message: error.message});
+    console.log(error);
+
+    res.json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
-//REMOVE IMAGE OBJECT
+// =======================
+// Remove Image Object
+// =======================
 
-export const removeImageObject = async (req, res)=>{
+export const removeImageObject = async (req, res) => {
   try {
     const { userId } = req.auth();
     const { object } = req.body;
-    const { image } = req.file;
+    const image = req.file;
     const plan = req.plan;
 
-    if(plan !== 'premium'){
-      return res.json({ success: false, message: "This feature is only available for premium subscriptions"})
+    if (plan !== "premium") {
+      return res.json({
+        success: false,
+        message: "This feature is only available for premium subscriptions",
+      });
     }
 
-    const {public_id} = await cloudinary.uploader.upload(image.path)
+    const { public_id } = await cloudinary.uploader.upload(image.path);
 
-    const imageUrl= cloudinary.url(public_id,{
-      transformation: [{effect: 'gen_remove:${object}'}],
-      resource_type: 'image'
-    })
+    const imageUrl = cloudinary.url(public_id, {
+      transformation: [
+        {
+          effect: `gen_remove:${object}`,
+        },
+      ],
+      resource_type: "image",
+    });
+
     await sql`
       INSERT INTO creations
-      (user_id, 'Remove background from image', content, type, publish)
+      (user_id, prompt, content, type)
       VALUES
-      (${userId}, ${'Removed ${object} from image'}, ${imageUrl}, 'image')
+      (${userId}, ${`Removed ${object} from image`}, ${imageUrl}, 'image')
     `;
 
-    res.json({ success: true, content: imageUrl})
-
+    res.json({
+      success: true,
+      content: imageUrl,
+    });
   } catch (error) {
-    console.log(error.message)
-    res.json({success: false, message: error.message});
+    console.log(error);
+
+    res.json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
-//Review Resume
+// =======================
+// Resume Review
+// =======================
 
-export const resumeReview = async (req, res)=>{
+export const resumeReview = async (req, res) => {
   try {
     const { userId } = req.auth();
     const resume = req.file;
     const plan = req.plan;
 
-    if(plan !== 'premium'){
-      return res.json({ success: false, message: "This feature is only available for premium subscriptions"})
+    if (plan !== "premium") {
+      return res.json({
+        success: false,
+        message: "This feature is only available for premium subscriptions",
+      });
     }
 
     if (resume.size > 5 * 1024 * 1024) {
-      return res.json({success: false, message: "Resume file size exceeds allowed size (5MB)."})
+      return res.json({
+        success: false,
+        message: "Resume file size exceeds allowed size (5MB).",
+      });
     }
 
-    const dataBuffer = fs.readFileSync(resume.path)
-    const pdfData = await pdf(dataBuffer)
+    const dataBuffer = fs.readFileSync(resume.path);
+
+    const pdfData = await pdfParse.default(dataBuffer);
 
     const prompt = `Review the following resume and provide constructive feedback on its strengths, weaknesses, and areas for improvement.
 
@@ -315,26 +374,41 @@ Resume Content:
 
 ${pdfData.text}`;
 
-    const response = await AI.chat.completions.create({
-        model: "gemini-3.5-flash",
-        messages: [{ role: "user", content: prompt, }],
-        temperature: 0.7,
-        max_tokens: 1000,
-  });
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are an experienced HR recruiter and ATS expert. Review resumes professionally.",
+        },
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      temperature: 0.5,
+    });
 
-    const content = response.choices[0].message.content
+    const content = completion.choices[0].message.content;
 
     await sql`
       INSERT INTO creations
-      (user_id, 'Remove background from image', content, type, publish)
+      (user_id, prompt, content, type)
       VALUES
-      (${userId}, 'Review the uploaded resume', ${content}, 'resume-review')
+      (${userId}, 'Review uploaded resume', ${content}, 'resume-review')
     `;
 
-    res.json({ success: true, content})
-
+    res.json({
+      success: true,
+      content,
+    });
   } catch (error) {
-    console.log(error.message)
-    res.json({success: false, message: error.message});
+    console.log(error);
+
+    res.json({
+      success: false,
+      message: error.message,
+    });
   }
 };
